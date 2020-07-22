@@ -1,14 +1,45 @@
 import { serve } from "https://deno.land/std/http/server.ts";
 
+type Database = Map<string, string>;
+
+const nodeIDS = [8001, 8002, 8003, 8004, 8005];
+
+function getOwnerForKey(key: string) {
+  return nodeIDS[key.length % nodeIDS.length];
+}
+
 async function startServer(port: number) {
   const server = serve({ port });
   const nodeId = port;
 
   console.log(`http://localhost:${port}/`);
 
-  let db: Map<string, string> = new Map();
+  let db: Database = new Map();
 
   const decoder = new TextDecoder("utf-8");
+
+  async function store(key: string, value: string) {
+    const ownerID = getOwnerForKey(key);
+    if (nodeId === ownerID) {
+      return db.set(key, value);
+    } else {
+      const response = await fetch(`http://localhost:${ownerID}${key}`, {
+        method: "POST",
+        body: value,
+      });
+      return await response.text();
+    }
+  }
+
+  async function lookup(key: string): Promise<string> {
+    const ownerID = getOwnerForKey(key);
+    if (nodeId === ownerID) {
+      return db.get(key) || "";
+    } else {
+      const response = await fetch(`http://localhost:${ownerID}${key}`);
+      return await response.text();
+    }
+  }
 
   for await (const req of server) {
     const key = req.url;
@@ -16,22 +47,19 @@ async function startServer(port: number) {
     switch (req.method) {
       case "POST": {
         const body = decoder.decode(await Deno.readAll(req.body));
-        db.set(key, body);
+        await store(key, body);
         console.log("store", { nodeId, db });
         req.respond({ body: "ok" });
         break;
       }
       case "GET": {
         console.log("query", { nodeId, key });
-        req.respond({ body: db.get(key) });
+        const value = await lookup(key);
+        req.respond({ body: value });
         break;
       }
     }
   }
 }
 
-startServer(8001);
-startServer(8002);
-startServer(8003);
-startServer(8004);
-startServer(8005);
+nodeIDS.forEach(startServer);
