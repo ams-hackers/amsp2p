@@ -1,8 +1,8 @@
 import { serve } from "https://deno.land/std/http/server.ts";
 
-type Database = Map<string, string>;
+import nodeIDS from "./servers.ts";
 
-const nodeIDS = [8001, 8002, 8003, 8004, 8005];
+type Database = Map<string, string>;
 
 function getOwnerForKey(key: string) {
   return nodeIDS[key.length % nodeIDS.length];
